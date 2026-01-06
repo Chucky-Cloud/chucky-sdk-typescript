@@ -66,29 +66,16 @@ export declare function verifyToken(token: string, secret: string): Promise<bool
  */
 export declare function isTokenExpired(token: string): boolean;
 /**
- * Extract project UUID from HMAC key
+ * @deprecated The project ID is now separate from the HMAC key for security reasons.
+ * Get your project ID from the Chucky portal (app.chucky.cloud) instead.
  *
- * The HMAC key format is `hk_live_{32-char-hex}`.
- * The hex part is converted to UUID format (8-4-4-4-12).
+ * Previously, the HMAC key embedded the project ID, but this exposed the secret
+ * in JWT tokens. Project IDs are now Convex document IDs visible in the portal.
  *
- * @param hmacKey - HMAC key from the portal (hk_live_...)
- * @returns Project UUID for use as `iss` claim in tokens
- *
- * @example
- * ```typescript
- * const hmacKey = 'hk_live_938642b649c64cc3975e504c0fbcbbd8';
- * const projectId = extractProjectId(hmacKey);
- * // Returns: '938642b6-49c6-4cc3-975e-504c0fbcbbd8'
- *
- * const token = await createToken({
- *   userId: 'user-123',
- *   projectId,
- *   secret: hmacKey,
- *   // ...
- * });
- * ```
+ * @param _hmacKey - Ignored (previously used to extract project ID)
+ * @throws Always throws an error directing users to get project ID from portal
  */
-export declare function extractProjectId(hmacKey: string): string;
+export declare function extractProjectId(_hmacKey: string): never;
 /**
  * Create a simple budget configuration
  *
