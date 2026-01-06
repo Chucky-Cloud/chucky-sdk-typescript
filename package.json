@@ -1,0 +1,63 @@
+{
+  "name": "@chucky.cloud/sdk",
+  "version": "0.1.1",
+  "description": "SDK for interacting with Chucky sandbox - supports both browser and Node.js",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./browser": {
+      "import": "./dist/browser.js",
+      "types": "./dist/browser.d.ts"
+    },
+    "./node": {
+      "import": "./dist/node.js",
+      "types": "./dist/node.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "chucky",
+    "claude",
+    "anthropic",
+    "ai",
+    "sdk",
+    "agent"
+  ],
+  "author": "Chucky Cloud",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
