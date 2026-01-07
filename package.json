@@ -1,7 +1,7 @@
 {
   "name": "@chucky.cloud/sdk",
   "version": "0.1.1",
-  "description": "SDK for interacting with Chucky sandbox - supports both browser and Node.js",
+  "description": "Universal TypeScript SDK for Chucky - build Claude-powered AI assistants for browser and Node.js",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -37,10 +37,26 @@
     "anthropic",
     "ai",
     "sdk",
-    "agent"
+    "agent",
+    "assistant",
+    "llm",
+    "mcp",
+    "websocket",
+    "ai-assistant",
+    "chatbot",
+    "tools",
+    "streaming"
   ],
   "author": "Chucky Cloud",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Chucky-Cloud/chucky-sdk-typescript.git"
+  },
+  "homepage": "https://github.com/Chucky-Cloud/chucky-sdk-typescript#readme",
+  "bugs": {
+    "url": "https://github.com/Chucky-Cloud/chucky-sdk-typescript/issues"
+  },
   "dependencies": {
     "ws": "^8.18.0"
   },

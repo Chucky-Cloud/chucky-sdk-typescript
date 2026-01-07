@@ -1,6 +1,11 @@
 # @chucky.cloud/sdk
 
-SDK for interacting with Chucky sandbox - supports both browser and Node.js.
+[![npm version](https://img.shields.io/npm/v/@chucky.cloud/sdk.svg)](https://www.npmjs.com/package/@chucky.cloud/sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+
+Universal TypeScript SDK for [Chucky](https://chucky.cloud) - build Claude-powered AI assistants for browser and Node.js.
 
 ## Installation
 
