@@ -67,17 +67,17 @@ export interface ToolInputSchema {
 export type ToolContentType = 'text' | 'image' | 'resource';
 
 /**
- * Text content in tool result
+ * Text content in tool result (MCP format)
  */
-export interface TextContent {
+export interface ToolTextContent {
   type: 'text';
   text: string;
 }
 
 /**
- * Image content in tool result
+ * Image content in tool result (MCP format)
  */
-export interface ImageContent {
+export interface ToolImageContent {
   type: 'image';
   /** Base64-encoded image data */
   data: string;
@@ -103,7 +103,7 @@ export interface ResourceContent {
 /**
  * Union type for all tool content
  */
-export type ToolContent = TextContent | ImageContent | ResourceContent;
+export type ToolContent = ToolTextContent | ToolImageContent | ResourceContent;
 
 /**
  * Tool execution result
@@ -149,16 +149,112 @@ export interface ToolDefinition<TInput = Record<string, unknown>> {
 }
 
 /**
- * MCP Server definition
+ * MCP Server with client-side tools (handlers run in your app)
+ * This is our custom format - bridge converts to SDK format
  */
-export interface McpServerDefinition {
+export interface McpClientToolsServer {
   /** Server name */
   name: string;
   /** Server version */
   version?: string;
-  /** Tools provided by this server */
+  /** Tools with handlers that execute client-side */
   tools: ToolDefinition[];
 }
+
+/**
+ * MCP Stdio server configuration
+ */
+export interface McpStdioServerConfig {
+  /** Server name */
+  name: string;
+  /** Server type */
+  type?: 'stdio';
+  /** Command to run */
+  command: string;
+  /** Command arguments */
+  args?: string[];
+  /** Environment variables */
+  env?: Record<string, string>;
+}
+
+/**
+ * MCP SSE server configuration
+ */
+export interface McpSSEServerConfig {
+  /** Server name */
+  name: string;
+  /** Server type */
+  type: 'sse';
+  /** SSE endpoint URL */
+  url: string;
+  /** Request headers */
+  headers?: Record<string, string>;
+}
+
+/**
+ * MCP HTTP server configuration
+ */
+export interface McpHttpServerConfig {
+  /** Server name */
+  name: string;
+  /** Server type */
+  type: 'http';
+  /** HTTP endpoint URL */
+  url: string;
+  /** Request headers */
+  headers?: Record<string, string>;
+}
+
+/**
+ * MCP Server definition - all supported server types
+ * Array format - bridge converts to Record<string, config> for official SDK
+ */
+export type McpServerDefinition =
+  | McpClientToolsServer  // Our custom format with handlers
+  | McpStdioServerConfig  // Stdio process
+  | McpSSEServerConfig    // SSE endpoint
+  | McpHttpServerConfig;  // HTTP endpoint
+
+/**
+ * Type guard for client-side tools server
+ */
+export function isClientToolsServer(server: McpServerDefinition): server is McpClientToolsServer {
+  return 'tools' in server;
+}
+
+/**
+ * Type guard for stdio server
+ */
+export function isStdioServer(server: McpServerDefinition): server is McpStdioServerConfig {
+  return 'command' in server;
+}
+
+/**
+ * Type guard for SSE server
+ */
+export function isSSEServer(server: McpServerDefinition): server is McpSSEServerConfig {
+  return 'type' in server && server.type === 'sse';
+}
+
+/**
+ * Type guard for HTTP server
+ */
+export function isHttpServer(server: McpServerDefinition): server is McpHttpServerConfig {
+  return 'type' in server && server.type === 'http';
+}
+
+/**
+ * Tool preset configuration
+ */
+export interface ToolPreset {
+  type: 'preset';
+  preset: 'claude_code';
+}
+
+/**
+ * Tools configuration - either allowlist of names or preset
+ */
+export type ToolsConfig = string[] | ToolPreset;
 
 /**
  * Tool call from the model
