@@ -1,6 +1,6 @@
 {
   "name": "@chucky.cloud/sdk",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Universal TypeScript SDK for Chucky - build Claude-powered AI assistants for browser and Node.js",
   "type": "module",
   "main": "./dist/index.js",
