@@ -130,12 +130,17 @@ export class WebSocketTransport extends BaseTransport {
      * Send a message to the server
      */
     async send(message) {
+        // Don't queue or send if we're closing/closed
+        if (this._status === 'disconnected' && !this.config.autoReconnect) {
+            this.log('Message dropped (disconnected):', message.type);
+            return;
+        }
         if (this._status !== 'connected') {
             // Queue message if not connected
             this.messageQueue.push(message);
             this.log('Message queued (not connected):', message.type);
-            // Try to connect if disconnected
-            if (this._status === 'disconnected') {
+            // Try to connect if disconnected and autoReconnect is enabled
+            if (this._status === 'disconnected' && this.config.autoReconnect) {
                 await this.connect();
             }
             return;

@@ -2,45 +2,52 @@
  * Session
  *
  * Represents a conversation session with the Chucky sandbox.
- * Supports multi-turn conversations, tool execution, and streaming.
+ * Matches the official Claude Agent SDK V2 interface.
+ *
+ * @example
+ * ```typescript
+ * const session = createSession({ token, model: 'claude-sonnet-4-5-20250929' });
+ *
+ * await session.send('Hello!');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'assistant') {
+ *     console.log(getAssistantText(msg));
+ *   }
+ * }
+ * ```
  */
 
 import type { SessionOptions } from '../types/options.js';
-import type { SessionResult, SessionInfo, SessionState, Message } from '../types/results.js';
+import type { SessionInfo, SessionState } from '../types/results.js';
 import type { ToolDefinition, ToolResult, ToolCall } from '../types/tools.js';
-import type { IncomingMessage, InitPayload } from '../types/messages.js';
+import type {
+  IncomingMessage,
+  InitPayload,
+  SDKMessage,
+  SDKResultMessage,
+  SDKAssistantMessage,
+  TextContent,
+} from '../types/messages.js';
 import {
   createInitMessage,
-  createSdkMessage,
+  createUserMessage,
   createControlMessage,
   createToolResultMessage,
   isToolCallMessage,
   isControlMessage,
   isResultMessage,
   isErrorMessage,
+  isAssistantMessage,
+  isSystemMessage,
+  isStreamEvent,
 } from '../types/messages.js';
 import type { Transport } from '../transport/Transport.js';
-import type { StreamingEvent } from './ChuckyClient.js';
 
 /**
  * Session event handlers
  */
 export interface SessionEventHandlers {
-  /** Called when session info is received */
   onSessionInfo?: (info: SessionInfo) => void;
-  /** Called when a message is received */
-  onMessage?: (message: Message) => void;
-  /** Called when streaming text is received */
-  onText?: (text: string) => void;
-  /** Called when a tool is being used */
-  onToolUse?: (toolCall: ToolCall) => void;
-  /** Called when a tool result is returned */
-  onToolResult?: (callId: string, result: ToolResult) => void;
-  /** Called when thinking is received */
-  onThinking?: (thinking: string) => void;
-  /** Called when session completes */
-  onComplete?: (result: SessionResult) => void;
-  /** Called when an error occurs */
   onError?: (error: Error) => void;
 }
 
@@ -49,31 +56,38 @@ export interface SessionEventHandlers {
  */
 interface SessionConfig {
   debug?: boolean;
-  oneShot?: boolean;
 }
 
 /**
- * Session class for managing conversations
+ * Generate a UUID v4
+ */
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+/**
+ * Session class - matches official V2 SDK interface
  *
- * @example
+ * Usage:
  * ```typescript
- * const session = await client.createSession({
- *   model: 'claude-sonnet-4-5-20250929',
- * });
+ * const session = createSession({ token, model: 'claude-sonnet-4-5-20250929' });
  *
- * // Simple send
- * const result = await session.send('Hello!');
- *
- * // Streaming
- * for await (const event of session.sendStream('Tell me a story')) {
- *   if (event.type === 'text') {
- *     process.stdout.write(event.text);
- *   }
+ * // Multi-turn conversation
+ * await session.send('What is 5 + 3?');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'result') console.log(msg.result);
  * }
  *
- * // Multi-turn
- * await session.send('What is the capital of France?');
- * await session.send('What about Germany?');
+ * await session.send('Multiply that by 2');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'result') console.log(msg.result);
+ * }
+ *
+ * session.close();
  * ```
  */
 export class Session {
@@ -83,21 +97,28 @@ export class Session {
   private eventHandlers: SessionEventHandlers = {};
   private toolHandlers: Map<string, ToolDefinition['handler']> = new Map();
   private messageBuffer: IncomingMessage[] = [];
-  private currentResult: SessionResult | null = null;
   private _state: SessionState = 'idle';
-  private _sessionId: string | null = null;
+  private _sessionId: string;
   private messageResolvers: Array<(message: IncomingMessage) => void> = [];
+  private connected: boolean = false;
+  private connectPromise: Promise<void> | null = null;
 
   constructor(transport: Transport, options: SessionOptions, config: SessionConfig = {}) {
     this.transport = transport;
     this.options = options;
     this.config = config;
+    this._sessionId = options.sessionId || generateUUID();
 
-    // Extract tool handlers from tool definitions
-    if (options.tools) {
-      for (const tool of options.tools) {
-        if (tool.handler) {
-          this.toolHandlers.set(tool.name, tool.handler);
+    // Extract tool handlers from client-side MCP servers only
+    if (options.mcpServers) {
+      for (const server of options.mcpServers) {
+        // Only extract handlers from servers with tools (not stdio/sse/http)
+        if ('tools' in server) {
+          for (const tool of server.tools) {
+            if (tool.handler) {
+              this.toolHandlers.set(tool.name, tool.handler);
+            }
+          }
         }
       }
     }
@@ -115,16 +136,9 @@ export class Session {
   }
 
   /**
-   * Get the current session state
-   */
-  get state(): SessionState {
-    return this._state;
-  }
-
-  /**
    * Get the session ID
    */
-  get sessionId(): string | null {
+  get sessionId(): string {
     return this._sessionId;
   }
 
@@ -137,9 +151,20 @@ export class Session {
   }
 
   /**
-   * Connect and initialize the session
+   * Connect and initialize the session (called automatically on first send)
    */
-  async connect(): Promise<void> {
+  private async ensureConnected(): Promise<void> {
+    if (this.connected) return;
+
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
+
+    this.connectPromise = this.connect();
+    await this.connectPromise;
+  }
+
+  private async connect(): Promise<void> {
     this._state = 'initializing';
     await this.transport.connect();
 
@@ -150,128 +175,143 @@ export class Session {
     // Wait for ready/session_info
     await this.waitForReady();
     this._state = 'ready';
+    this.connected = true;
   }
 
   /**
-   * Send a message and wait for complete response
+   * Send a message to the session
+   *
+   * Matches V2 SDK: send() returns Promise<void>
+   * Use stream() to get the response.
+   *
+   * @example
+   * ```typescript
+   * await session.send('Hello!');
+   * for await (const msg of session.stream()) {
+   *   // Handle messages
+   * }
+   * ```
    */
-  async send(message: string): Promise<SessionResult> {
+  async send(message: string): Promise<void> {
+    await this.ensureConnected();
+
     if (this._state !== 'ready') {
       throw new Error(`Cannot send: session state is ${this._state}`);
     }
 
     this._state = 'processing';
-    this.currentResult = null;
 
-    // Send user message
-    await this.transport.send(createSdkMessage({
-      type: 'user_message',
-      content: message,
-    }));
-
-    // Wait for result
-    const result = await this.waitForResult();
-    this._state = 'ready';
-    return result;
+    // Send user message in official SDK format
+    const userMessage = createUserMessage(message, this._sessionId);
+    await this.transport.send(userMessage);
   }
 
   /**
-   * Send a message with streaming
+   * Stream the response after sending a message
+   *
+   * Matches V2 SDK: Returns AsyncGenerator<SDKMessage>
+   *
+   * @example
+   * ```typescript
+   * await session.send('Hello!');
+   * for await (const msg of session.stream()) {
+   *   if (msg.type === 'assistant') {
+   *     const text = msg.message.content
+   *       .filter(b => b.type === 'text')
+   *       .map(b => b.text)
+   *       .join('');
+   *     console.log(text);
+   *   }
+   *   if (msg.type === 'result') {
+   *     console.log('Done:', msg.result);
+   *   }
+   * }
+   * ```
    */
-  async *sendStream(message: string): AsyncGenerator<StreamingEvent, void, unknown> {
-    if (this._state !== 'ready') {
-      throw new Error(`Cannot send: session state is ${this._state}`);
-    }
-
-    this._state = 'processing';
-    this.currentResult = null;
-
-    // Send user message
-    await this.transport.send(createSdkMessage({
-      type: 'user_message',
-      content: message,
-    }));
-
-    // Stream messages
+  async *stream(): AsyncGenerator<SDKMessage, void, unknown> {
     while (this._state === 'processing' || this._state === 'waiting_tool') {
       const msg = await this.waitForNextMessage();
 
-      // Convert to streaming events
-      const events = this.messageToStreamingEvents(msg);
-      for (const event of events) {
-        yield event;
-      }
-
-      // Check if complete
-      if (isResultMessage(msg)) {
-        this.currentResult = msg.payload as SessionResult;
-        this._state = 'completed';
-        break;
-      }
-
-      // Handle tool calls
+      // Handle tool calls internally
       if (isToolCallMessage(msg)) {
         this._state = 'waiting_tool';
         await this.handleToolCall(msg.payload);
         this._state = 'processing';
+        continue;
+      }
+
+      // Yield SDK messages to caller
+      if (isAssistantMessage(msg) || isResultMessage(msg) || isSystemMessage(msg) || isStreamEvent(msg)) {
+        yield msg as SDKMessage;
+      }
+
+      // Check if complete
+      if (isResultMessage(msg)) {
+        this._state = 'ready';
+        break;
+      }
+
+      // Handle errors
+      if (isErrorMessage(msg)) {
+        this._state = 'ready';
+        throw new Error(msg.payload.message);
       }
     }
-
-    this._state = 'ready';
   }
 
   /**
-   * Execute a one-shot prompt
+   * Receive messages (alias for stream for V2 compatibility)
    */
-  async prompt(message: string): Promise<SessionResult> {
-    return this.send(message);
-  }
-
-  /**
-   * Get the current/last result
-   */
-  getResult(): SessionResult | null {
-    return this.currentResult;
+  receive(): AsyncGenerator<SDKMessage, void, unknown> {
+    return this.stream();
   }
 
   /**
    * Close the session
    */
-  async close(): Promise<void> {
-    await this.transport.send(createControlMessage('close'));
-    await this.transport.disconnect();
+  close(): void {
+    this.transport.send(createControlMessage('close')).catch(() => {});
+    this.transport.disconnect().catch(() => {});
     this._state = 'completed';
+  }
+
+  /**
+   * Support for `await using` (TypeScript 5.2+)
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.close();
   }
 
   /**
    * Build init payload from options
    */
   private buildInitPayload(): InitPayload {
-    const { tools, mcpServers, ...rest } = this.options;
+    const { mcpServers, ...rest } = this.options;
 
-    // Serialize tools (remove handlers)
-    const serializedTools = tools?.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      executeIn: tool.executeIn,
-    }));
+    // Serialize MCP servers - handle all server types
+    const serializedMcpServers = mcpServers?.map((server) => {
+      // Client-side tools servers - serialize tools (remove handlers)
+      if ('tools' in server) {
+        return {
+          name: server.name,
+          version: server.version,
+          tools: server.tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+            // If tool has a handler, it executes on the client (SDK) side
+            executeIn: tool.handler ? 'client' : tool.executeIn,
+          })),
+        };
+      }
 
-    // Serialize MCP servers
-    const serializedMcpServers = mcpServers?.map((server) => ({
-      name: server.name,
-      version: server.version,
-      tools: server.tools.map((tool) => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema,
-        executeIn: tool.executeIn,
-      })),
-    }));
+      // Stdio, SSE, HTTP servers pass through as-is
+      return server;
+    });
 
     return {
       ...rest,
-      tools: serializedTools,
+      // tools is passed through as-is (string[] or preset for allowlisting)
       mcpServers: serializedMcpServers,
     };
   }
@@ -286,28 +326,25 @@ export class Session {
     if (isControlMessage(message)) {
       if (message.payload.action === 'session_info') {
         const info = message.payload.data as unknown as SessionInfo;
-        this._sessionId = info.sessionId;
+        this._sessionId = info.sessionId || this._sessionId;
         this.eventHandlers.onSessionInfo?.(info);
-      } else if (message.payload.action === 'ready') {
-        // Session is ready
       }
+    }
+
+    // Handle system init messages (official SDK format)
+    if (isSystemMessage(message) && message.subtype === 'init') {
+      this._sessionId = message.session_id || this._sessionId;
+      this.eventHandlers.onSessionInfo?.({
+        sessionId: message.session_id,
+        model: message.model,
+        tools: message.tools,
+      });
     }
 
     // Handle errors
     if (isErrorMessage(message)) {
       const error = new Error(message.payload.message);
       this.eventHandlers.onError?.(error);
-    }
-
-    // Handle tool calls
-    if (isToolCallMessage(message)) {
-      // Will be handled by stream/send
-    }
-
-    // Handle results
-    if (isResultMessage(message)) {
-      this.currentResult = message.payload as SessionResult;
-      this.eventHandlers.onComplete?.(this.currentResult);
     }
 
     // Notify waiting resolvers
@@ -336,6 +373,11 @@ export class Session {
             return true;
           }
         }
+        if (isSystemMessage(message) && message.subtype === 'init') {
+          clearTimeout(timeout);
+          resolve();
+          return true;
+        }
         if (isErrorMessage(message)) {
           clearTimeout(timeout);
           reject(new Error(message.payload.message));
@@ -360,66 +402,13 @@ export class Session {
   }
 
   /**
-   * Wait for result
-   */
-  private async waitForResult(): Promise<SessionResult> {
-    return new Promise<SessionResult>((resolve, reject) => {
-      const processMessage = async (message: IncomingMessage) => {
-        if (isResultMessage(message)) {
-          this.currentResult = message.payload as SessionResult;
-          resolve(this.currentResult);
-          return true;
-        }
-
-        if (isErrorMessage(message)) {
-          reject(new Error(message.payload.message));
-          return true;
-        }
-
-        if (isToolCallMessage(message)) {
-          await this.handleToolCall(message.payload);
-          return false;
-        }
-
-        return false;
-      };
-
-      const processLoop = async () => {
-        // Process buffered messages
-        while (this.messageBuffer.length > 0) {
-          const msg = this.messageBuffer.shift()!;
-          if (await processMessage(msg)) {
-            return;
-          }
-        }
-
-        // Wait for new messages
-        const waitForNext = () => {
-          this.messageResolvers.push(async (msg) => {
-            if (await processMessage(msg)) {
-              return;
-            }
-            waitForNext();
-          });
-        };
-
-        waitForNext();
-      };
-
-      processLoop();
-    });
-  }
-
-  /**
    * Wait for next message
    */
   private async waitForNextMessage(): Promise<IncomingMessage> {
-    // Check buffer first
     if (this.messageBuffer.length > 0) {
       return this.messageBuffer.shift()!;
     }
 
-    // Wait for new message
     return new Promise<IncomingMessage>((resolve) => {
       this.messageResolvers.push(resolve);
     });
@@ -432,19 +421,14 @@ export class Session {
     const handler = this.toolHandlers.get(toolCall.toolName);
 
     if (!handler) {
-      // No local handler - server will execute it
       this.log('No local handler for tool:', toolCall.toolName);
       return;
     }
 
     this.log('Executing tool:', toolCall.toolName);
-    this.eventHandlers.onToolUse?.(toolCall);
 
     try {
       const result = await handler(toolCall.input);
-      this.eventHandlers.onToolResult?.(toolCall.callId, result);
-
-      // Send result back
       await this.transport.send(createToolResultMessage(toolCall.callId, result));
     } catch (error) {
       const errorResult: ToolResult = {
@@ -456,52 +440,34 @@ export class Session {
   }
 
   /**
-   * Convert message to streaming events
-   */
-  private messageToStreamingEvents(message: IncomingMessage): StreamingEvent[] {
-    const events: StreamingEvent[] = [];
-
-    if (message.type === 'sdk_message') {
-      const payload = message.payload as Record<string, unknown>;
-
-      // Handle different SDK message types
-      if (payload.type === 'assistant_message' || payload.type === 'content_block_delta') {
-        const delta = payload.delta as { type: string; text?: string; thinking?: string } | undefined;
-        if (delta?.type === 'text_delta' && delta.text) {
-          events.push({ type: 'text', text: delta.text });
-          this.eventHandlers.onText?.(delta.text);
-        } else if (delta?.type === 'thinking_delta' && delta.thinking) {
-          events.push({ type: 'thinking', thinking: delta.thinking });
-          this.eventHandlers.onThinking?.(delta.thinking);
-        }
-      }
-    }
-
-    if (isToolCallMessage(message)) {
-      events.push({
-        type: 'tool_use',
-        id: message.payload.callId,
-        name: message.payload.toolName,
-        input: message.payload.input,
-      });
-    }
-
-    if (isErrorMessage(message)) {
-      events.push({
-        type: 'error',
-        error: new Error(message.payload.message),
-      });
-    }
-
-    return events;
-  }
-
-  /**
    * Log debug messages
    */
   private log(...args: unknown[]): void {
     if (this.config.debug) {
-      console.log('[ChuckySession]', ...args);
+      console.log('[Session]', ...args);
     }
   }
+}
+
+/**
+ * Extract text from an assistant message
+ */
+export function getAssistantText(msg: SDKMessage): string | null {
+  if (msg.type !== 'assistant') return null;
+  return (msg as SDKAssistantMessage).message.content
+    .filter((block): block is TextContent => block.type === 'text')
+    .map(block => block.text)
+    .join('');
+}
+
+/**
+ * Extract result from a result message
+ */
+export function getResultText(msg: SDKMessage): string | null {
+  if (msg.type !== 'result') return null;
+  const resultMsg = msg as SDKResultMessage;
+  if (resultMsg.subtype === 'success') {
+    return resultMsg.result;
+  }
+  return null;
 }

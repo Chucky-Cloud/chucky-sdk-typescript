@@ -80,13 +80,18 @@ export abstract class BaseTransport implements Transport {
   protected config: TransportConfig;
 
   constructor(config: TransportConfig) {
+    // Filter out undefined values to prevent them from overwriting defaults
+    const cleanConfig = Object.fromEntries(
+      Object.entries(config).filter(([_, v]) => v !== undefined)
+    ) as TransportConfig;
+
     this.config = {
-      timeout: 30000,
+      timeout: 60000, // 60s - container startup can take time
       keepAliveInterval: 300000, // 5 minutes
-      autoReconnect: true,
-      maxReconnectAttempts: 5,
+      autoReconnect: false, // Disabled - server doesn't support reconnect
+      maxReconnectAttempts: 0,
       debug: false,
-      ...config,
+      ...cleanConfig,
     };
   }
 

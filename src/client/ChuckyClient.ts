@@ -3,18 +3,17 @@
  *
  * Main entry point for the Chucky SDK.
  * Provides methods to create sessions and execute prompts.
+ * Matches the official Claude Agent SDK V2 interface.
  */
 
 import type {
   ClientOptions,
   SessionOptions,
-  PromptOptions,
-  ConnectionStatus,
   ClientEventHandlers,
 } from '../types/options.js';
-import type { PromptResult } from '../types/results.js';
+import type { SDKResultMessage } from '../types/messages.js';
 import { WebSocketTransport } from '../transport/WebSocketTransport.js';
-import { Session } from './Session.js';
+import { Session, getAssistantText, getResultText } from './Session.js';
 
 /**
  * Default base URL for the Chucky service
@@ -24,6 +23,8 @@ const DEFAULT_BASE_URL = 'wss://conjure.chucky.cloud/ws';
 /**
  * Chucky client for interacting with the sandbox service
  *
+ * Matches the official Claude Agent SDK V2 interface.
+ *
  * @example
  * ```typescript
  * import { ChuckyClient } from '@chucky.cloud/sdk';
@@ -32,28 +33,30 @@ const DEFAULT_BASE_URL = 'wss://conjure.chucky.cloud/ws';
  *   token: 'your-jwt-token',
  * });
  *
- * // Create a session
- * const session = await client.createSession({
+ * // Create a session (V2 style)
+ * const session = client.createSession({
  *   model: 'claude-sonnet-4-5-20250929',
  *   systemPrompt: 'You are a helpful assistant.',
  * });
  *
- * // Send messages
- * const result = await session.send('Hello, world!');
- * console.log(result.text);
+ * // Send messages and stream responses
+ * await session.send('Hello, world!');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'assistant') {
+ *     const text = getAssistantText(msg);
+ *     console.log(text);
+ *   }
+ *   if (msg.type === 'result') {
+ *     console.log('Done:', msg);
+ *   }
+ * }
  *
- * // Or use one-shot prompts
- * const response = await client.prompt({
- *   message: 'What is 2 + 2?',
- *   model: 'claude-sonnet-4-5-20250929',
- * });
- * console.log(response.text);
+ * session.close();
  * ```
  */
 export class ChuckyClient {
   private readonly options: Required<Pick<ClientOptions, 'baseUrl' | 'token' | 'debug'>> &
     Omit<ClientOptions, 'baseUrl' | 'token' | 'debug'>;
-  private transport: WebSocketTransport | null = null;
   private eventHandlers: ClientEventHandlers = {};
   private activeSessions: Map<string, Session> = new Map();
 
@@ -69,13 +72,6 @@ export class ChuckyClient {
   }
 
   /**
-   * Get the current connection status
-   */
-  get status(): ConnectionStatus {
-    return this.transport?.status ?? 'disconnected';
-  }
-
-  /**
    * Set event handlers
    */
   on(handlers: ClientEventHandlers): this {
@@ -86,34 +82,26 @@ export class ChuckyClient {
   /**
    * Create a new session
    *
+   * Matches V2 SDK: createSession() returns a Session immediately.
+   * Connection happens automatically on first send().
+   *
    * @param options - Session configuration options
    * @returns A new session instance
    *
    * @example
    * ```typescript
-   * const session = await client.createSession({
+   * const session = client.createSession({
    *   model: 'claude-sonnet-4-5-20250929',
    *   systemPrompt: 'You are a helpful coding assistant.',
-   *   tools: [
-   *     {
-   *       name: 'get_weather',
-   *       description: 'Get the current weather',
-   *       inputSchema: {
-   *         type: 'object',
-   *         properties: {
-   *           city: { type: 'string', description: 'City name' },
-   *         },
-   *         required: ['city'],
-   *       },
-   *       handler: async ({ city }) => ({
-   *         content: [{ type: 'text', text: `Weather in ${city}: Sunny, 72°F` }],
-   *       }),
-   *     },
-   *   ],
    * });
+   *
+   * await session.send('Hello!');
+   * for await (const msg of session.stream()) {
+   *   // Handle messages
+   * }
    * ```
    */
-  async createSession(options: SessionOptions = {}): Promise<Session> {
+  createSession(options: SessionOptions = {}): Session {
     const transport = this.createTransport();
     const session = new Session(transport, options, {
       debug: this.options.debug,
@@ -122,11 +110,12 @@ export class ChuckyClient {
     // Track the session
     session.on({
       onSessionInfo: (info) => {
-        this.activeSessions.set(info.sessionId, session);
+        if (info.sessionId) {
+          this.activeSessions.set(info.sessionId, session);
+        }
       },
     });
 
-    await session.connect();
     return session;
   }
 
@@ -139,12 +128,11 @@ export class ChuckyClient {
    *
    * @example
    * ```typescript
-   * const session = await client.resumeSession('session-123', {
-   *   continue: true,
-   * });
+   * const session = client.resumeSession('session-123');
+   * await session.send('Continue our conversation');
    * ```
    */
-  async resumeSession(sessionId: string, options: Omit<SessionOptions, 'sessionId'> = {}): Promise<Session> {
+  resumeSession(sessionId: string, options: Omit<SessionOptions, 'sessionId'> = {}): Session {
     return this.createSession({
       ...options,
       sessionId,
@@ -154,74 +142,55 @@ export class ChuckyClient {
   /**
    * Execute a one-shot prompt (stateless)
    *
+   * Matches V2 SDK: prompt() for simple one-off queries.
+   *
+   * @param message - The message to send
    * @param options - Prompt configuration
-   * @returns The prompt result
+   * @returns The result message
    *
    * @example
    * ```typescript
-   * const result = await client.prompt({
-   *   message: 'Explain quantum computing in simple terms',
-   *   model: 'claude-sonnet-4-5-20250929',
-   * });
-   * console.log(result.text);
-   * ```
-   */
-  async prompt(options: PromptOptions): Promise<PromptResult> {
-    const transport = this.createTransport();
-    const session = new Session(transport, options, {
-      debug: this.options.debug,
-      oneShot: true,
-    });
-
-    await session.connect();
-    return session.prompt(options.message) as Promise<PromptResult>;
-  }
-
-  /**
-   * Execute a prompt with streaming
-   *
-   * @param options - Prompt configuration
-   * @yields Stream events and final result
-   *
-   * @example
-   * ```typescript
-   * for await (const event of client.promptStream({ message: 'Tell me a story' })) {
-   *   if (event.type === 'text') {
-   *     process.stdout.write(event.text);
-   *   }
+   * const result = await client.prompt(
+   *   'Explain quantum computing in simple terms',
+   *   { model: 'claude-sonnet-4-5-20250929' }
+   * );
+   * if (result.subtype === 'success') {
+   *   console.log(result.result);
    * }
    * ```
    */
-  async *promptStream(options: PromptOptions): AsyncGenerator<StreamingEvent, PromptResult, unknown> {
-    const transport = this.createTransport();
-    const session = new Session(transport, options, {
-      debug: this.options.debug,
-      oneShot: true,
-    });
+  async prompt(message: string, options: SessionOptions = {}): Promise<SDKResultMessage> {
+    const session = this.createSession(options);
 
-    await session.connect();
+    try {
+      await session.send(message);
 
-    for await (const event of session.sendStream(options.message)) {
-      yield event;
+      let result: SDKResultMessage | null = null;
+      for await (const msg of session.stream()) {
+        if (msg.type === 'result') {
+          result = msg as SDKResultMessage;
+          break;
+        }
+      }
+
+      if (!result) {
+        throw new Error('No result message received');
+      }
+
+      return result;
+    } finally {
+      session.close();
     }
-
-    // Return final result
-    return session.getResult() as PromptResult;
   }
 
   /**
    * Close all active sessions and disconnect
    */
-  async close(): Promise<void> {
+  close(): void {
     for (const session of this.activeSessions.values()) {
-      await session.close();
+      session.close();
     }
     this.activeSessions.clear();
-
-    if (this.transport) {
-      await this.transport.disconnect();
-      this.transport = null;
-    }
   }
 
   /**
@@ -241,45 +210,6 @@ export class ChuckyClient {
 }
 
 /**
- * Streaming event types
- */
-export interface StreamingTextEvent {
-  type: 'text';
-  text: string;
-}
-
-export interface StreamingToolUseEvent {
-  type: 'tool_use';
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-}
-
-export interface StreamingToolResultEvent {
-  type: 'tool_result';
-  id: string;
-  content: unknown;
-  isError?: boolean;
-}
-
-export interface StreamingThinkingEvent {
-  type: 'thinking';
-  thinking: string;
-}
-
-export interface StreamingErrorEvent {
-  type: 'error';
-  error: Error;
-}
-
-export type StreamingEvent =
-  | StreamingTextEvent
-  | StreamingToolUseEvent
-  | StreamingToolResultEvent
-  | StreamingThinkingEvent
-  | StreamingErrorEvent;
-
-/**
  * Create a Chucky client
  *
  * @param options - Client configuration
@@ -297,3 +227,6 @@ export type StreamingEvent =
 export function createClient(options: ClientOptions): ChuckyClient {
   return new ChuckyClient(options);
 }
+
+// Re-export helpers for convenience
+export { getAssistantText, getResultText };

@@ -2,32 +2,29 @@
  * Session
  *
  * Represents a conversation session with the Chucky sandbox.
- * Supports multi-turn conversations, tool execution, and streaming.
+ * Matches the official Claude Agent SDK V2 interface.
+ *
+ * @example
+ * ```typescript
+ * const session = createSession({ token, model: 'claude-sonnet-4-5-20250929' });
+ *
+ * await session.send('Hello!');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'assistant') {
+ *     console.log(getAssistantText(msg));
+ *   }
+ * }
+ * ```
  */
 import type { SessionOptions } from '../types/options.js';
-import type { SessionResult, SessionInfo, SessionState, Message } from '../types/results.js';
-import type { ToolResult, ToolCall } from '../types/tools.js';
+import type { SessionInfo } from '../types/results.js';
+import type { SDKMessage } from '../types/messages.js';
 import type { Transport } from '../transport/Transport.js';
-import type { StreamingEvent } from './ChuckyClient.js';
 /**
  * Session event handlers
  */
 export interface SessionEventHandlers {
-    /** Called when session info is received */
     onSessionInfo?: (info: SessionInfo) => void;
-    /** Called when a message is received */
-    onMessage?: (message: Message) => void;
-    /** Called when streaming text is received */
-    onText?: (text: string) => void;
-    /** Called when a tool is being used */
-    onToolUse?: (toolCall: ToolCall) => void;
-    /** Called when a tool result is returned */
-    onToolResult?: (callId: string, result: ToolResult) => void;
-    /** Called when thinking is received */
-    onThinking?: (thinking: string) => void;
-    /** Called when session completes */
-    onComplete?: (result: SessionResult) => void;
-    /** Called when an error occurs */
     onError?: (error: Error) => void;
 }
 /**
@@ -35,30 +32,26 @@ export interface SessionEventHandlers {
  */
 interface SessionConfig {
     debug?: boolean;
-    oneShot?: boolean;
 }
 /**
- * Session class for managing conversations
+ * Session class - matches official V2 SDK interface
  *
- * @example
+ * Usage:
  * ```typescript
- * const session = await client.createSession({
- *   model: 'claude-sonnet-4-5-20250929',
- * });
+ * const session = createSession({ token, model: 'claude-sonnet-4-5-20250929' });
  *
- * // Simple send
- * const result = await session.send('Hello!');
- *
- * // Streaming
- * for await (const event of session.sendStream('Tell me a story')) {
- *   if (event.type === 'text') {
- *     process.stdout.write(event.text);
- *   }
+ * // Multi-turn conversation
+ * await session.send('What is 5 + 3?');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'result') console.log(msg.result);
  * }
  *
- * // Multi-turn
- * await session.send('What is the capital of France?');
- * await session.send('What about Germany?');
+ * await session.send('Multiply that by 2');
+ * for await (const msg of session.stream()) {
+ *   if (msg.type === 'result') console.log(msg.result);
+ * }
+ *
+ * session.close();
  * ```
  */
 export declare class Session {
@@ -68,47 +61,75 @@ export declare class Session {
     private eventHandlers;
     private toolHandlers;
     private messageBuffer;
-    private currentResult;
     private _state;
     private _sessionId;
     private messageResolvers;
+    private connected;
+    private connectPromise;
     constructor(transport: Transport, options: SessionOptions, config?: SessionConfig);
-    /**
-     * Get the current session state
-     */
-    get state(): SessionState;
     /**
      * Get the session ID
      */
-    get sessionId(): string | null;
+    get sessionId(): string;
     /**
      * Set event handlers
      */
     on(handlers: SessionEventHandlers): this;
     /**
-     * Connect and initialize the session
+     * Connect and initialize the session (called automatically on first send)
      */
-    connect(): Promise<void>;
+    private ensureConnected;
+    private connect;
     /**
-     * Send a message and wait for complete response
+     * Send a message to the session
+     *
+     * Matches V2 SDK: send() returns Promise<void>
+     * Use stream() to get the response.
+     *
+     * @example
+     * ```typescript
+     * await session.send('Hello!');
+     * for await (const msg of session.stream()) {
+     *   // Handle messages
+     * }
+     * ```
      */
-    send(message: string): Promise<SessionResult>;
+    send(message: string): Promise<void>;
     /**
-     * Send a message with streaming
+     * Stream the response after sending a message
+     *
+     * Matches V2 SDK: Returns AsyncGenerator<SDKMessage>
+     *
+     * @example
+     * ```typescript
+     * await session.send('Hello!');
+     * for await (const msg of session.stream()) {
+     *   if (msg.type === 'assistant') {
+     *     const text = msg.message.content
+     *       .filter(b => b.type === 'text')
+     *       .map(b => b.text)
+     *       .join('');
+     *     console.log(text);
+     *   }
+     *   if (msg.type === 'result') {
+     *     console.log('Done:', msg.result);
+     *   }
+     * }
+     * ```
      */
-    sendStream(message: string): AsyncGenerator<StreamingEvent, void, unknown>;
+    stream(): AsyncGenerator<SDKMessage, void, unknown>;
     /**
-     * Execute a one-shot prompt
+     * Receive messages (alias for stream for V2 compatibility)
      */
-    prompt(message: string): Promise<SessionResult>;
-    /**
-     * Get the current/last result
-     */
-    getResult(): SessionResult | null;
+    receive(): AsyncGenerator<SDKMessage, void, unknown>;
     /**
      * Close the session
      */
-    close(): Promise<void>;
+    close(): void;
+    /**
+     * Support for `await using` (TypeScript 5.2+)
+     */
+    [Symbol.asyncDispose](): Promise<void>;
     /**
      * Build init payload from options
      */
@@ -122,10 +143,6 @@ export declare class Session {
      */
     private waitForReady;
     /**
-     * Wait for result
-     */
-    private waitForResult;
-    /**
      * Wait for next message
      */
     private waitForNextMessage;
@@ -134,13 +151,17 @@ export declare class Session {
      */
     private handleToolCall;
     /**
-     * Convert message to streaming events
-     */
-    private messageToStreamingEvents;
-    /**
      * Log debug messages
      */
     private log;
 }
+/**
+ * Extract text from an assistant message
+ */
+export declare function getAssistantText(msg: SDKMessage): string | null;
+/**
+ * Extract result from a result message
+ */
+export declare function getResultText(msg: SDKMessage): string | null;
 export {};
 //# sourceMappingURL=Session.d.ts.map

@@ -1,40 +1,179 @@
 /**
  * WebSocket Message Types
  *
- * Defines the envelope format and message types for communication
- * between the SDK client and the Chucky server.
+ * Matches the official Claude Agent SDK message format.
+ * See: https://platform.claude.com/docs/en/agent-sdk/typescript
  */
 import type { ToolCall, ToolResult } from './tools.js';
-import type { SessionOptions, PromptOptions } from './options.js';
+import type { SessionOptions } from './options.js';
+export type UUID = string;
 /**
- * WebSocket envelope types
+ * Anthropic API message content types
  */
-export type WsEnvelopeType = 'init' | 'prompt' | 'sdk_message' | 'control' | 'error' | 'ping' | 'pong' | 'tool_call' | 'tool_result' | 'result';
+export type TextContent = {
+    type: 'text';
+    text: string;
+};
+export type ImageContent = {
+    type: 'image';
+    source: {
+        type: 'base64';
+        media_type: string;
+        data: string;
+    };
+};
+export type ToolUseContent = {
+    type: 'tool_use';
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+};
+export type ToolResultContent = {
+    type: 'tool_result';
+    tool_use_id: string;
+    content: string | Array<TextContent | ImageContent>;
+    is_error?: boolean;
+};
+export type ContentBlock = TextContent | ImageContent | ToolUseContent | ToolResultContent;
 /**
- * Base envelope structure
+ * Anthropic API User Message
  */
-export interface WsEnvelope<T = unknown> {
-    /** Message type */
-    type: WsEnvelopeType;
-    /** Message payload */
-    payload: T;
+export interface APIUserMessage {
+    role: 'user';
+    content: string | ContentBlock[];
 }
+/**
+ * Anthropic API Assistant Message
+ */
+export interface APIAssistantMessage {
+    role: 'assistant';
+    content: ContentBlock[];
+}
+/**
+ * User message - sent by the client
+ */
+export interface SDKUserMessage {
+    type: 'user';
+    uuid?: UUID;
+    session_id: string;
+    message: APIUserMessage;
+    parent_tool_use_id: string | null;
+}
+/**
+ * Assistant message - response from Claude
+ */
+export interface SDKAssistantMessage {
+    type: 'assistant';
+    uuid: UUID;
+    session_id: string;
+    message: APIAssistantMessage;
+    parent_tool_use_id: string | null;
+}
+/**
+ * Result message subtypes
+ */
+export type ResultSubtype = 'success' | 'error_max_turns' | 'error_during_execution' | 'error_max_budget_usd' | 'error_max_structured_output_retries';
+/**
+ * Success result message
+ */
+export interface SDKResultMessageSuccess {
+    type: 'result';
+    subtype: 'success';
+    uuid: UUID;
+    session_id: string;
+    duration_ms: number;
+    duration_api_ms: number;
+    is_error: boolean;
+    num_turns: number;
+    result: string;
+    total_cost_usd: number;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_creation_input_tokens: number;
+        cache_read_input_tokens: number;
+    };
+    structured_output?: unknown;
+}
+/**
+ * Error result message
+ */
+export interface SDKResultMessageError {
+    type: 'result';
+    subtype: Exclude<ResultSubtype, 'success'>;
+    uuid: UUID;
+    session_id: string;
+    duration_ms: number;
+    duration_api_ms: number;
+    is_error: boolean;
+    num_turns: number;
+    total_cost_usd: number;
+    usage: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_creation_input_tokens: number;
+        cache_read_input_tokens: number;
+    };
+    errors: string[];
+}
+export type SDKResultMessage = SDKResultMessageSuccess | SDKResultMessageError;
+/**
+ * System message subtypes
+ */
+export type SystemSubtype = 'init' | 'compact_boundary';
+/**
+ * System init message
+ */
+export interface SDKSystemMessageInit {
+    type: 'system';
+    subtype: 'init';
+    uuid: UUID;
+    session_id: string;
+    cwd: string;
+    tools: string[];
+    mcp_servers: Array<{
+        name: string;
+        status: string;
+    }>;
+    model: string;
+    permissionMode: string;
+}
+/**
+ * System compact boundary message
+ */
+export interface SDKSystemMessageCompact {
+    type: 'system';
+    subtype: 'compact_boundary';
+    uuid: UUID;
+    session_id: string;
+    compact_metadata: {
+        trigger: 'manual' | 'auto';
+        pre_tokens: number;
+    };
+}
+export type SDKSystemMessage = SDKSystemMessageInit | SDKSystemMessageCompact;
+/**
+ * Partial assistant message (streaming)
+ */
+export interface SDKPartialAssistantMessage {
+    type: 'stream_event';
+    event: unknown;
+    parent_tool_use_id: string | null;
+    uuid: UUID;
+    session_id: string;
+}
+/**
+ * All SDK message types (matching official SDK)
+ */
+export type SDKMessage = SDKUserMessage | SDKAssistantMessage | SDKResultMessage | SDKSystemMessage | SDKPartialAssistantMessage;
+/**
+ * WebSocket envelope types for our transport
+ */
+export type WsEnvelopeType = 'init' | 'user' | 'assistant' | 'result' | 'system' | 'stream_event' | 'control' | 'error' | 'ping' | 'pong' | 'tool_call' | 'tool_result';
 /**
  * Init message payload (session initialization)
  */
-export interface InitPayload extends Omit<SessionOptions, 'tools' | 'mcpServers'> {
-    /** Serialized tool definitions */
-    tools?: unknown[];
-    /** Serialized MCP server definitions */
-    mcpServers?: unknown[];
-}
-/**
- * Prompt message payload (one-shot prompt)
- */
-export interface PromptPayload extends Omit<PromptOptions, 'tools' | 'mcpServers'> {
-    /** Serialized tool definitions */
-    tools?: unknown[];
-    /** Serialized MCP server definitions */
+export interface InitPayload extends Omit<SessionOptions, 'mcpServers'> {
     mcpServers?: unknown[];
 }
 /**
@@ -45,111 +184,73 @@ export type ControlAction = 'ready' | 'session_info' | 'end_input' | 'close';
  * Control message payload
  */
 export interface ControlPayload {
-    /** Control action */
     action: ControlAction;
-    /** Additional data */
     data?: Record<string, unknown>;
 }
 /**
  * Error message payload
  */
 export interface ErrorPayload {
-    /** Error message */
     message: string;
-    /** Error code */
     code?: string;
-    /** Additional error details */
     details?: Record<string, unknown>;
 }
 /**
- * Ping/Pong message payload
+ * Ping/Pong payload
  */
 export interface PingPongPayload {
-    /** Timestamp */
     timestamp: number;
 }
 /**
- * Tool call message payload
+ * Tool call payload (server -> client)
  */
 export interface ToolCallPayload extends ToolCall {
 }
 /**
- * Tool result message payload
+ * Tool result payload (client -> server)
  */
 export interface ToolResultPayload {
-    /** Call ID */
     callId: string;
-    /** Tool result */
     result: ToolResult;
 }
-/**
- * Result message payload (final response)
- */
-export interface ResultPayload {
-    /** Result type */
-    type: 'result';
-    /** Result subtype */
-    subtype?: string;
-    /** Response text */
-    text?: string;
-    /** Total cost in USD */
-    total_cost_usd?: number;
-    /** Duration in seconds */
-    duration_secs?: number;
-    /** Number of turns */
-    turn_count?: number;
-    /** Additional result data */
-    [key: string]: unknown;
-}
-/**
- * SDK message payload (native Claude Agent SDK messages)
- */
-export interface SdkMessagePayload {
-    /** Message type from SDK */
-    type: string;
-    /** Message data */
-    [key: string]: unknown;
-}
-export interface InitEnvelope extends WsEnvelope<InitPayload> {
+export interface InitEnvelope {
     type: 'init';
+    payload: InitPayload;
 }
-export interface PromptEnvelope extends WsEnvelope<PromptPayload> {
-    type: 'prompt';
-}
-export interface SdkMessageEnvelope extends WsEnvelope<SdkMessagePayload> {
-    type: 'sdk_message';
-}
-export interface ControlEnvelope extends WsEnvelope<ControlPayload> {
+export interface ControlEnvelope {
     type: 'control';
+    payload: ControlPayload;
 }
-export interface ErrorEnvelope extends WsEnvelope<ErrorPayload> {
+export interface ErrorEnvelope {
     type: 'error';
+    payload: ErrorPayload;
 }
-export interface PingEnvelope extends WsEnvelope<PingPongPayload> {
+export interface PingEnvelope {
     type: 'ping';
+    payload: PingPongPayload;
 }
-export interface PongEnvelope extends WsEnvelope<PingPongPayload> {
+export interface PongEnvelope {
     type: 'pong';
+    payload: PingPongPayload;
 }
-export interface ToolCallEnvelope extends WsEnvelope<ToolCallPayload> {
+export interface ToolCallEnvelope {
     type: 'tool_call';
+    payload: ToolCallPayload;
 }
-export interface ToolResultEnvelope extends WsEnvelope<ToolResultPayload> {
+export interface ToolResultEnvelope {
     type: 'tool_result';
-}
-export interface ResultEnvelope extends WsEnvelope<ResultPayload> {
-    type: 'result';
+    payload: ToolResultPayload;
 }
 /**
- * Union type for all outgoing messages (client -> server)
+ * Outgoing messages (client -> server)
  */
-export type OutgoingMessage = InitEnvelope | PromptEnvelope | SdkMessageEnvelope | ControlEnvelope | PingEnvelope | ToolResultEnvelope;
+export type OutgoingMessage = InitEnvelope | SDKUserMessage | ControlEnvelope | PingEnvelope | ToolResultEnvelope;
 /**
- * Union type for all incoming messages (server -> client)
+ * Incoming messages (server -> client)
  */
-export type IncomingMessage = SdkMessageEnvelope | ControlEnvelope | ErrorEnvelope | PongEnvelope | ToolCallEnvelope | ResultEnvelope;
+export type IncomingMessage = SDKAssistantMessage | SDKResultMessage | SDKSystemMessage | SDKPartialAssistantMessage | ControlEnvelope | ErrorEnvelope | PongEnvelope | ToolCallEnvelope;
 /**
- * Union type for all messages
+ * All messages
  */
 export type AnyMessage = OutgoingMessage | IncomingMessage;
 /**
@@ -157,13 +258,12 @@ export type AnyMessage = OutgoingMessage | IncomingMessage;
  */
 export declare function createInitMessage(payload: InitPayload): InitEnvelope;
 /**
- * Create a prompt message
+ * Create a user message (official SDK format)
  */
-export declare function createPromptMessage(payload: PromptPayload): PromptEnvelope;
-/**
- * Create an SDK message
- */
-export declare function createSdkMessage(payload: SdkMessagePayload): SdkMessageEnvelope;
+export declare function createUserMessage(content: string | ContentBlock[], sessionId: string, options?: {
+    uuid?: UUID;
+    parentToolUseId?: string | null;
+}): SDKUserMessage;
 /**
  * Create a control message
  */
@@ -177,19 +277,51 @@ export declare function createPingMessage(): PingEnvelope;
  */
 export declare function createToolResultMessage(callId: string, result: ToolResult): ToolResultEnvelope;
 /**
- * Check if a message is a result message
+ * Check if message is a user message
  */
-export declare function isResultMessage(message: AnyMessage): message is ResultEnvelope;
+export declare function isUserMessage(message: AnyMessage): message is SDKUserMessage;
 /**
- * Check if a message is a tool call message
+ * Check if message is an assistant message
+ */
+export declare function isAssistantMessage(message: AnyMessage): message is SDKAssistantMessage;
+/**
+ * Check if message is a result message
+ */
+export declare function isResultMessage(message: AnyMessage): message is SDKResultMessage;
+/**
+ * Check if message is a success result
+ */
+export declare function isSuccessResult(message: AnyMessage): message is SDKResultMessageSuccess;
+/**
+ * Check if message is an error result
+ */
+export declare function isErrorResult(message: AnyMessage): message is SDKResultMessageError;
+/**
+ * Check if message is a system message
+ */
+export declare function isSystemMessage(message: AnyMessage): message is SDKSystemMessage;
+/**
+ * Check if message is a stream event
+ */
+export declare function isStreamEvent(message: AnyMessage): message is SDKPartialAssistantMessage;
+/**
+ * Check if message is a tool call
  */
 export declare function isToolCallMessage(message: AnyMessage): message is ToolCallEnvelope;
 /**
- * Check if a message is a control message
+ * Check if message is a control message
  */
 export declare function isControlMessage(message: AnyMessage): message is ControlEnvelope;
 /**
- * Check if a message is an error message
+ * Check if message is an error message
  */
 export declare function isErrorMessage(message: AnyMessage): message is ErrorEnvelope;
+/**
+ * Extract text from result message
+ */
+export declare function getResultText(message: SDKResultMessage): string | null;
+/**
+ * Extract text from assistant message content
+ */
+export declare function getAssistantText(message: SDKAssistantMessage): string;
 //# sourceMappingURL=messages.d.ts.map

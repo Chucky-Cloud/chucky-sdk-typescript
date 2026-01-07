@@ -4,5 +4,5 @@
  * Re-exports all types for convenient importing.
  */
 // Message helpers
-export { createInitMessage, createPromptMessage, createSdkMessage, createControlMessage, createPingMessage, createToolResultMessage, isResultMessage, isToolCallMessage, isControlMessage, isErrorMessage, } from './messages.js';
+export { createInitMessage, createUserMessage, createControlMessage, createPingMessage, createToolResultMessage, isUserMessage, isAssistantMessage, isResultMessage, isSuccessResult, isErrorResult, isSystemMessage, isStreamEvent, isToolCallMessage, isControlMessage, isErrorMessage, getResultText, getAssistantText, } from './messages.js';
 //# sourceMappingURL=index.js.map

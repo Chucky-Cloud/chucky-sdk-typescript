@@ -5,7 +5,7 @@
  * Designed for both browser and Node.js environments.
  */
 
-import type { ToolDefinition, McpServerDefinition } from './tools.js';
+import type { McpServerDefinition, ToolsConfig } from './tools.js';
 
 /**
  * Available Claude models
@@ -96,9 +96,10 @@ export interface BaseOptions {
   systemPrompt?: SystemPrompt;
 
   /**
-   * Tool definitions for this session/prompt
+   * Tool configuration - allowlist of tool names or preset
+   * Pass an array of tool names or use the preset to get Claude Code's default tools
    */
-  tools?: ToolDefinition[];
+  tools?: ToolsConfig;
 
   /**
    * List of tool names that are allowed
@@ -111,7 +112,8 @@ export interface BaseOptions {
   disallowedTools?: string[];
 
   /**
-   * MCP server definitions
+   * MCP server definitions (array format)
+   * Bridge translates to Record format for official SDK
    */
   mcpServers?: McpServerDefinition[];
 

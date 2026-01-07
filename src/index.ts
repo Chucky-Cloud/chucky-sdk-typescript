@@ -52,19 +52,10 @@
  */
 
 // ============================================================================
-// Client
+// Client (V2 Interface)
 // ============================================================================
 
-export { ChuckyClient, createClient } from './client/index.js';
-export type {
-  StreamingEvent,
-  StreamingTextEvent,
-  StreamingToolUseEvent,
-  StreamingToolResultEvent,
-  StreamingThinkingEvent,
-  StreamingErrorEvent,
-} from './client/index.js';
-
+export { ChuckyClient, createClient, getAssistantText, getResultText } from './client/index.js';
 export { Session } from './client/index.js';
 export type { SessionEventHandlers } from './client/index.js';
 
@@ -144,8 +135,8 @@ export type {
   JsonSchemaProperty,
   ToolInputSchema,
   ToolContentType,
-  TextContent,
-  ImageContent,
+  ToolTextContent,
+  ToolImageContent,
   ResourceContent,
   ToolContent,
   ToolResult,
@@ -157,12 +148,31 @@ export type {
   ToolCallResponse,
 } from './types/index.js';
 
-// Messages
+// SDK Message types (official format)
 export type {
+  UUID,
+  SDKTextContent,
+  SDKImageContent,
+  ToolUseContent,
+  ToolResultContent,
+  SDKContentBlock,
+  APIUserMessage,
+  APIAssistantMessage,
+  SDKUserMessage,
+  SDKAssistantMessage,
+  SDKResultMessage,
+  SDKResultMessageSuccess,
+  SDKResultMessageError,
+  ResultSubtype,
+  SDKSystemMessage,
+  SDKSystemMessageInit,
+  SDKSystemMessageCompact,
+  SystemSubtype,
+  SDKPartialAssistantMessage,
+  SDKMessage,
+  // Transport envelope types
   WsEnvelopeType,
-  WsEnvelope,
   InitPayload,
-  PromptPayload,
   ControlAction,
   ControlPayload,
   ErrorPayload,
@@ -190,7 +200,6 @@ export type {
   ToolResultBlock,
   ThinkingBlock,
   ImageBlock,
-  ContentBlock,
   Message,
   Usage,
   CostBreakdown,
@@ -205,12 +214,17 @@ export type {
 // Message helpers
 export {
   createInitMessage,
-  createPromptMessage,
-  createSdkMessage,
+  createUserMessage,
   createControlMessage,
   createPingMessage,
   createToolResultMessage,
+  isUserMessage,
+  isAssistantMessage,
   isResultMessage,
+  isSuccessResult,
+  isErrorResult,
+  isSystemMessage,
+  isStreamEvent,
   isToolCallMessage,
   isControlMessage,
   isErrorMessage,

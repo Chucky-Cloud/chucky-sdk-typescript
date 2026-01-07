@@ -2,17 +2,10 @@
  * Client Index
  *
  * Re-exports all client classes and types.
+ * Matches the official Claude Agent SDK V2 interface.
  */
 
-export { ChuckyClient, createClient } from './ChuckyClient.js';
-export type {
-  StreamingEvent,
-  StreamingTextEvent,
-  StreamingToolUseEvent,
-  StreamingToolResultEvent,
-  StreamingThinkingEvent,
-  StreamingErrorEvent,
-} from './ChuckyClient.js';
+export { ChuckyClient, createClient, getAssistantText, getResultText } from './ChuckyClient.js';
 
 export { Session } from './Session.js';
 export type { SessionEventHandlers } from './Session.js';

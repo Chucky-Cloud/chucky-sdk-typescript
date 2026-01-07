@@ -51,9 +51,9 @@
  * @packageDocumentation
  */
 // ============================================================================
-// Client
+// Client (V2 Interface)
 // ============================================================================
-export { ChuckyClient, createClient } from './client/index.js';
+export { ChuckyClient, createClient, getAssistantText, getResultText } from './client/index.js';
 export { Session } from './client/index.js';
 // ============================================================================
 // Tools
@@ -69,5 +69,5 @@ export { ChuckyError, ConnectionError, AuthenticationError, BudgetExceededError,
 // ============================================================================
 export { WebSocketTransport } from './transport/index.js';
 // Message helpers
-export { createInitMessage, createPromptMessage, createSdkMessage, createControlMessage, createPingMessage, createToolResultMessage, isResultMessage, isToolCallMessage, isControlMessage, isErrorMessage, } from './types/index.js';
+export { createInitMessage, createUserMessage, createControlMessage, createPingMessage, createToolResultMessage, isUserMessage, isAssistantMessage, isResultMessage, isSuccessResult, isErrorResult, isSystemMessage, isStreamEvent, isToolCallMessage, isControlMessage, isErrorMessage, } from './types/index.js';
 //# sourceMappingURL=index.js.map

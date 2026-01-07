@@ -209,13 +209,17 @@ export type SessionState =
  */
 export interface SessionInfo {
   /** Session ID */
-  sessionId: string;
+  sessionId?: string;
   /** Current state */
-  state: SessionState;
+  state?: SessionState;
   /** Number of messages in conversation */
   messageCount?: number;
   /** Session creation time (ISO 8601) */
   createdAt?: string;
   /** Last activity time (ISO 8601) */
   lastActivityAt?: string;
+  /** Model being used */
+  model?: string;
+  /** Available tools */
+  tools?: string[];
 }

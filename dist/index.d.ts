@@ -50,8 +50,7 @@
  *
  * @packageDocumentation
  */
-export { ChuckyClient, createClient } from './client/index.js';
-export type { StreamingEvent, StreamingTextEvent, StreamingToolUseEvent, StreamingToolResultEvent, StreamingThinkingEvent, StreamingErrorEvent, } from './client/index.js';
+export { ChuckyClient, createClient, getAssistantText, getResultText } from './client/index.js';
 export { Session } from './client/index.js';
 export type { SessionEventHandlers } from './client/index.js';
 export { createTool, tool, browserTool, serverTool, textResult, errorResult, imageResult, McpServerBuilder, createMcpServer, mcpServer, } from './tools/index.js';
@@ -61,9 +60,9 @@ export { ChuckyError, ConnectionError, AuthenticationError, BudgetExceededError,
 export { WebSocketTransport } from './transport/index.js';
 export type { Transport, TransportConfig, TransportEvents } from './transport/index.js';
 export type { Model, SystemPrompt, OutputFormat, AgentDefinition, BaseOptions, SessionOptions, PromptOptions, ClientOptions, ConnectionStatus, ClientEventHandlers, } from './types/index.js';
-export type { JsonSchemaType, JsonSchemaProperty, ToolInputSchema, ToolContentType, TextContent, ImageContent, ResourceContent, ToolContent, ToolResult, ToolExecutionLocation, ToolHandler, ToolDefinition, McpServerDefinition, ToolCall, ToolCallResponse, } from './types/index.js';
-export type { WsEnvelopeType, WsEnvelope, InitPayload, PromptPayload, ControlAction, ControlPayload, ErrorPayload, OutgoingMessage, IncomingMessage, } from './types/index.js';
+export type { JsonSchemaType, JsonSchemaProperty, ToolInputSchema, ToolContentType, ToolTextContent, ToolImageContent, ResourceContent, ToolContent, ToolResult, ToolExecutionLocation, ToolHandler, ToolDefinition, McpServerDefinition, ToolCall, ToolCallResponse, } from './types/index.js';
+export type { UUID, SDKTextContent, SDKImageContent, ToolUseContent, ToolResultContent, SDKContentBlock, APIUserMessage, APIAssistantMessage, SDKUserMessage, SDKAssistantMessage, SDKResultMessage, SDKResultMessageSuccess, SDKResultMessageError, ResultSubtype, SDKSystemMessage, SDKSystemMessageInit, SDKSystemMessageCompact, SystemSubtype, SDKPartialAssistantMessage, SDKMessage, WsEnvelopeType, InitPayload, ControlAction, ControlPayload, ErrorPayload, OutgoingMessage, IncomingMessage, } from './types/index.js';
 export type { BudgetWindow, TokenBudget, TokenPermissions, TokenSdkConfig, BudgetTokenPayload, CreateTokenOptions, DecodedToken, } from './types/index.js';
-export type { MessageRole, ContentBlockType, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock, ImageBlock, ContentBlock, Message, Usage, CostBreakdown, SessionResult, PromptResult, StreamEvent, PartialMessage, SessionState, SessionInfo, } from './types/index.js';
-export { createInitMessage, createPromptMessage, createSdkMessage, createControlMessage, createPingMessage, createToolResultMessage, isResultMessage, isToolCallMessage, isControlMessage, isErrorMessage, } from './types/index.js';
+export type { MessageRole, ContentBlockType, TextBlock, ToolUseBlock, ToolResultBlock, ThinkingBlock, ImageBlock, Message, Usage, CostBreakdown, SessionResult, PromptResult, StreamEvent, PartialMessage, SessionState, SessionInfo, } from './types/index.js';
+export { createInitMessage, createUserMessage, createControlMessage, createPingMessage, createToolResultMessage, isUserMessage, isAssistantMessage, isResultMessage, isSuccessResult, isErrorResult, isSystemMessage, isStreamEvent, isToolCallMessage, isControlMessage, isErrorMessage, } from './types/index.js';
 //# sourceMappingURL=index.d.ts.map
