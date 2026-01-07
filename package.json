@@ -53,7 +53,7 @@
     "type": "git",
     "url": "git+https://github.com/Chucky-Cloud/chucky-sdk-typescript.git"
   },
-  "homepage": "https://github.com/Chucky-Cloud/chucky-sdk-typescript#readme",
+  "homepage": "https://chucky.cloud",
   "bugs": {
     "url": "https://github.com/Chucky-Cloud/chucky-sdk-typescript/issues"
   },
