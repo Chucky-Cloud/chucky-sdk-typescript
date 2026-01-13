@@ -9,6 +9,7 @@
 import type {
   ClientOptions,
   SessionOptions,
+  PromptOptions,
   ClientEventHandlers,
 } from '../types/options.js';
 import type { SDKResultMessage } from '../types/messages.js';
@@ -142,25 +143,53 @@ export class ChuckyClient {
   /**
    * Execute a one-shot prompt (stateless)
    *
-   * Matches V2 SDK: prompt() for simple one-off queries.
+   * Supports two call signatures:
+   * - `prompt('message', { model: '...' })` - positional style
+   * - `prompt({ message: '...', model: '...' })` - object style
    *
-   * @param message - The message to send
-   * @param options - Prompt configuration
+   * @param messageOrOptions - The message string OR an options object with message
+   * @param options - Prompt configuration (only used with positional style)
    * @returns The result message
    *
    * @example
    * ```typescript
+   * // Positional style
    * const result = await client.prompt(
    *   'Explain quantum computing in simple terms',
    *   { model: 'claude-sonnet-4-5-20250929' }
    * );
+   *
+   * // Object style
+   * const result = await client.prompt({
+   *   message: 'Explain quantum computing in simple terms',
+   *   model: 'claude-sonnet-4-5-20250929',
+   * });
+   *
    * if (result.subtype === 'success') {
    *   console.log(result.result);
    * }
    * ```
    */
-  async prompt(message: string, options: SessionOptions = {}): Promise<SDKResultMessage> {
-    const session = this.createSession(options);
+  async prompt(
+    messageOrOptions: string | PromptOptions,
+    options: SessionOptions = {}
+  ): Promise<SDKResultMessage> {
+    // Support both call signatures
+    let message: string;
+    let sessionOptions: SessionOptions;
+
+    if (typeof messageOrOptions === 'object') {
+      // Object style: prompt({ message: '...', model: '...' })
+      const { message: msg, ...rest } = messageOrOptions;
+      message = msg;
+      sessionOptions = rest;
+    } else {
+      // Positional style: prompt('...', { model: '...' })
+      message = messageOrOptions;
+      sessionOptions = options;
+    }
+
+    const session = this.createSession(sessionOptions);
 
     try {
       await session.send(message);

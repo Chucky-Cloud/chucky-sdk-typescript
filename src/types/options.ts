@@ -181,6 +181,11 @@ export interface SessionOptions extends BaseOptions {
    * Settings sources for configuration
    */
   settingSources?: Array<'user' | 'project' | 'local'>;
+
+  /**
+   * Job ID for tracking background/deferred executions
+   */
+  jobId?: string;
 }
 
 /**

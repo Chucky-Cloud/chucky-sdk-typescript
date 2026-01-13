@@ -1,23 +1,26 @@
 {
   "name": "@chucky.cloud/sdk",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Universal TypeScript SDK for Chucky - build Claude-powered AI assistants for browser and Node.js",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./browser": {
+      "types": "./dist/browser.d.ts",
       "import": "./dist/browser.js",
-      "types": "./dist/browser.d.ts"
+      "require": "./dist/browser.cjs"
     },
     "./node": {
+      "types": "./dist/node.d.ts",
       "import": "./dist/node.js",
-      "types": "./dist/node.d.ts"
+      "require": "./dist/node.cjs"
     }
   },
   "files": [
@@ -25,9 +28,10 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "clean": "rm -rf dist",
+    "test": "tsx test/integration.test.ts",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit"
   },
@@ -63,6 +67,8 @@
   "devDependencies": {
     "@types/node": "^22.10.10",
     "@types/ws": "^8.5.13",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.3"
   },
   "peerDependencies": {
