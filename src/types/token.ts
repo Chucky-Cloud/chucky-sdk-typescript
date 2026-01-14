@@ -5,9 +5,10 @@
  */
 
 /**
- * Budget window types
+ * Budget window types.
+ * Use 'lifetime' for one-time tokens where the budget never resets.
  */
-export type BudgetWindow = 'hour' | 'day' | 'week' | 'month';
+export type BudgetWindow = 'hour' | 'day' | 'week' | 'month' | 'lifetime';
 
 /**
  * Budget configuration in a token
