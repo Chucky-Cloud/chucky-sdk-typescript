@@ -27,6 +27,7 @@ import type {
   SDKResultMessage,
   SDKAssistantMessage,
   TextContent,
+  ContentBlock,
 } from '../types/messages.js';
 import {
   createInitMessage,
@@ -184,15 +185,25 @@ export class Session {
    * Matches V2 SDK: send() returns Promise<void>
    * Use stream() to get the response.
    *
+   * Supports both text-only messages and multimodal content (text + images).
+   *
    * @example
    * ```typescript
+   * // Text-only message
    * await session.send('Hello!');
+   *
+   * // Multimodal message with image
+   * await session.send([
+   *   { type: 'text', text: 'What is in this image?' },
+   *   { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '...' } }
+   * ]);
+   *
    * for await (const msg of session.stream()) {
    *   // Handle messages
    * }
    * ```
    */
-  async send(message: string): Promise<void> {
+  async send(message: string | ContentBlock[]): Promise<void> {
     await this.ensureConnected();
 
     if (this._state !== 'ready') {
