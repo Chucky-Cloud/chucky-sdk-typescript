@@ -261,9 +261,9 @@ export function createBudget(options: {
   aiDollars: number;
   /** Compute budget in hours */
   computeHours: number;
-  /** Budget window */
-  window: 'hour' | 'day' | 'week' | 'month';
-  /** Window start (default: now) */
+  /** Budget window. Use 'lifetime' for one-time tokens that never reset. */
+  window: 'hour' | 'day' | 'week' | 'month' | 'lifetime';
+  /** Window start (default: now). For 'lifetime', this is the fixed reference point. */
   windowStart?: Date;
 }): TokenBudget {
   return {
