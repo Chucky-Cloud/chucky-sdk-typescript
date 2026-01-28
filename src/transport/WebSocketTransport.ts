@@ -47,11 +47,14 @@ export class WebSocketTransport extends BaseTransport {
   }
 
   /**
-   * Build the WebSocket URL with token
+   * Build the WebSocket URL with token and optional vessel
    */
   private buildUrl(): string {
     const url = new URL(this.config.url);
     url.searchParams.set('token', this.config.token);
+    if (this.config.vessel) {
+      url.searchParams.set('vessel', this.config.vessel);
+    }
     return url.toString();
   }
 

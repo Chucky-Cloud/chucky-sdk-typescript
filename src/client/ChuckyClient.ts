@@ -229,6 +229,7 @@ export class ChuckyClient {
     return new WebSocketTransport({
       url: this.options.baseUrl,
       token: this.options.token,
+      vessel: this.options.vessel,
       timeout: this.options.timeout,
       keepAliveInterval: this.options.keepAliveInterval,
       autoReconnect: this.options.autoReconnect,

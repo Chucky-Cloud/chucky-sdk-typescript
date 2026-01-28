@@ -214,6 +214,13 @@ export interface ClientOptions {
   token: string;
 
   /**
+   * Persistent sandbox name (vessel)
+   * When specified, enables reusable sandboxes that persist across connections.
+   * First connection creates a new sandbox, subsequent connections resume it.
+   */
+  vessel?: string;
+
+  /**
    * Enable debug logging
    */
   debug?: boolean;

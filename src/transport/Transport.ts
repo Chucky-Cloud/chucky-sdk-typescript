@@ -26,6 +26,8 @@ export interface TransportConfig {
   url: string;
   /** Authentication token */
   token: string;
+  /** Persistent sandbox name (vessel) */
+  vessel?: string;
   /** Connection timeout in milliseconds */
   timeout?: number;
   /** Keep-alive interval in milliseconds */
